@@ -840,7 +840,7 @@ def list_my_movies():
             if not file_ident: continue
 
             title = movie.get('title')
-            list_item = xbmcgui.ListItem(label=title)
+            list_item = xbmcgui.ListItem(label=f"{title} ({movie.get('releaseYear')})")
             
             info = {
                 'mediatype': 'movie',
@@ -916,7 +916,10 @@ def list_seasons(params):
             season_number = season.get('seasonNumber')
             if season_number == 0: continue
 
+            year = season.get('releaseYear')
             title = f"Série {season_number}"
+            if year:
+                title += f" ({year})"
             list_item = xbmcgui.ListItem(label=title)
             info = {'title': title, 'mediatype': 'season', 'tvshowtitle': show_details.get('title')}
             list_item.setInfo('video', info)

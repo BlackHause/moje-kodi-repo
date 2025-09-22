@@ -1,0 +1,21 @@
+Finální příkazy pro nahrání na GitHub
+Otevři příkazový řádek a přejdi do tvé složky:
+
+DOS
+
+cd "C:\Users\dorci\Desktop\My Cinema\moje-kodi-repo"
+Připrav a ulož všechny změny, které jsi udělal:
+
+DOS
+
+git add . && git commit -m "Aktualizace"
+Vynuť nahrání na GitHub. Tento příkaz serveru řekne, aby ignoroval neshody a přijal tvoji verzi jako jedinou správnou:
+
+DOS
+
+git push --force
+Nebo vše v jednom řádku:
+DOS
+
+git add . && git commit -m "Aktualizace" && git push --force
+Tímto se online repozitář na adrese https://github.com/BlackHause/moje-kodi-repo přepíše přesně tím, co máš u sebe v počítači.
