@@ -17,5 +17,5 @@ git push --force
 Nebo vše v jednom řádku:
 DOS
 
-git add . && git commit -m "Aktualizace" && git push --force
+git add . && git commit -m "Aktualizace 0,6,0" && git push --force
 Tímto se online repozitář na adrese https://github.com/BlackHause/moje-kodi-repo přepíše přesně tím, co máš u sebe v počítači.

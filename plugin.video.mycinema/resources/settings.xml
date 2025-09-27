@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <settings>
     <category label="30204">
+		<setting id="view_id_list" type="number" label="ID zobrazení pro seznamy (např. 500, 50)" default="52" />
         <setting label="30030" type="lsep" />
         <setting label="30031" id="wsuser" type="text" default="" />
         <setting label="30032" id="wspass" type="text" default="" option="hidden" />
