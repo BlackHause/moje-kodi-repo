@@ -703,8 +703,13 @@ def menu():
     list_item.setArt({'icon': 'DefaultAddonService.png'})
     xbmcplugin.addDirectoryItem(_handle, get_url(action='settings'), list_item, False)
     xbmcplugin.endOfDirectory(_handle)
-    if VIEW_ID_LIST and VIEW_ID_LIST != '0':
-        xbmc.executebuiltin(f'Container.SetViewMode({VIEW_ID_LIST})')
+    # === ZAČÁTEK ZMĚNY: Použití specifického ID pro hlavní menu ===
+    # Použijeme nové nastavení 'view_id_main_menu' pouze pro tuto funkci.
+    main_menu_view_id = _addon.getSetting('view_id_main_menu')
+    if main_menu_view_id and main_menu_view_id != '0':
+        xbmc.executebuiltin(f'Container.SetViewMode({main_menu_view_id})')
+    # === KONEC ZMĚNY ===
+
 
 def movies_menu():
     xbmcplugin.setPluginCategory(_handle, 'Filmy')

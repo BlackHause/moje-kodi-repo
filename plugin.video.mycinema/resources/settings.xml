@@ -2,6 +2,7 @@
 <settings>
     <category label="30204">
 		<setting id="view_id_list" type="number" label="ID zobrazení pro seznamy (např. 500, 50)" default="52" />
+		<setting id="view_id_main_menu" type="number" label="ID zobrazení pro HLAVNÍ MENU" default="50" />
         <setting label="30030" type="lsep" />
         <setting label="30031" id="wsuser" type="text" default="" />
         <setting label="30032" id="wspass" type="text" default="" option="hidden" />
