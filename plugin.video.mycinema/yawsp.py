@@ -22,8 +22,6 @@ import unidecode
 import re
 import zipfile
 import uuid
-import series_manager
-import themoviedb
 from collections import defaultdict
 
 try:
@@ -55,8 +53,6 @@ _addon = xbmcaddon.Addon()
 _session = requests.Session()
 _session.headers.update(HEADERS)
 _profile = translatePath( _addon.getAddonInfo('profile'))
-# ... ostatní proměnné
-_profile = translatePath( _addon.getAddonInfo('profile'))
 try:
     _profile = _profile.decode("utf-8")
 except:
@@ -68,20 +64,13 @@ try:
 except:
     pass
 
-# --- DEFINICE CEST K IKONÁM (SPOLEHLIVÉ SYSTÉMOVÉ IKONY) ---
-ICON_FAVOURITES = 'DefaultFavourites.png' # Pro žebříčky
-ICON_CHANNELS = 'DefaultPVRChannels.png' # Pro TV tipy
-
-# === ZAČÁTEK NOVÉ ČÁSTI: Definice ikon pro nové kategorie ===
+ICON_FAVOURITES = 'DefaultFavourites.png'
+ICON_CHANNELS = 'DefaultPVRChannels.png'
 ICON_DOCUMENTS = 'DefaultActorSolid.png'
 ICON_POHADKY = 'DefaultActor.png'
 ICON_HUDEBNI = 'DefaultAddonLyrics.png'
 ICON_KONCERTY = 'DefaultMusicGenres.png'
-# === KONEC NOVÉ ČÁSTI ===
-
-# === ZMĚNA: Načtení ID zobrazení z nastavení ===
 VIEW_ID_LIST = _addon.getSetting('view_id_list')
-# === KONEC ZMĚNY ===
 
 
 def get_url(**kwargs):
@@ -357,12 +346,10 @@ def search(params):
         listitem.setArt({'icon': 'DefaultAddSource.png'})
         xbmcplugin.addDirectoryItem(_handle, get_url(action='search',ask=1), listitem, True)
         
-        #newest
         listitem = xbmcgui.ListItem(label=_addon.getLocalizedString(30208))
         listitem.setArt({'icon': 'DefaultAddonsRecentlyUpdated.png'})
         xbmcplugin.addDirectoryItem(_handle, get_url(action='search',what=NONE_WHAT,sort=SORTS[1]), listitem, True)
         
-        #biggest
         listitem = xbmcgui.ListItem(label=_addon.getLocalizedString(30209))
         listitem.setArt({'icon': 'DefaultHardDisk.png'})
         xbmcplugin.addDirectoryItem(_handle, get_url(action='search',what=NONE_WHAT,sort=SORTS[3]), listitem, True)
@@ -532,17 +519,11 @@ def info(params):
         xbmcgui.Dialog().textviewer(_addon.getAddonInfo('name'), text)
 
 def getlink(ident,wst,dtype='video_stream'):
-    #uuid experiment
     duuid = _addon.getSetting('duuid')
     if not duuid:
         duuid = str(uuid.uuid4())
         _addon.setSetting('duuid',duuid)
     data = {'ident':ident,'wst': wst,'download_type':dtype,'device_uuid':duuid}
-    #TODO password protect
-    #response = api('file_protected',data) #protected
-    #xml = ET.fromstring(response.content)
-    #if is_ok(xml) and xml.find('protected').text != 0:
-    #    pass #ask for password
     response = api('file_link',data)
     xml = ET.fromstring(response.content)
     if is_ok(xml):
@@ -555,16 +536,16 @@ def play(params):
     token = revalidate()
     link = getlink(params['ident'],token)
     if link is not None:
-        # Nová logika pro uložení do historie
         media_id = params.get('media_id')
         media_type = params.get('media_type')
         if media_id and media_type:
             try:
-                _session.post(f"{BACKEND_URL}/Database/history", json={"mediaId": media_id, "mediaType": media_type})
+                # Odeslání požadavku na backend pro záznam do historie
+                # Používáme json parametr místo query stringu
+                _session.post(f"{BACKEND_URL}/Database/history", json={"mediaId": int(media_id), "mediaType": media_type})
             except Exception as e:
                 xbmc.log(f"Chyba při ukládání do historie: {e}", level=xbmc.LOGERROR)
 
-        #headers experiment
         headers = _session.headers
         if headers:
             headers.update({'Cookie':'wst='+token})
@@ -586,12 +567,11 @@ def download(params):
     token = revalidate()
     where = _addon.getSetting('dfolder')
     if not where or not xbmcvfs.exists(where):
-        popinfo('set folder!', sound=True)#_addon.getLocalizedString(30101)
+        popinfo('set folder!', sound=True)
         _addon.openSettings()
         return
         
     local = os.path.exists(where)
-        
     normalize = 'true' == _addon.getSetting('dnormalize')
     notify = 'true' == _addon.getSetting('dnotify')
     every = _addon.getSetting('dnevery')
@@ -631,7 +611,6 @@ def download(params):
         bf.close()
         popinfo(_addon.getLocalizedString(30303) + name, sound=True)
     except Exception as e:
-        #TODO - remove unfinished file?
         traceback.print_exc()
         popinfo(_addon.getLocalizedString(30304) + name, icon=xbmcgui.NOTIFICATION_ERROR, sound=True)
 
@@ -686,9 +665,7 @@ def db(params):
             listitem = xbmcgui.ListItem(label=item['title'])
             if 'plot' in item:
                 listitem.setInfo('video', {'title': item['title'],'plot': item['plot']})
-            # === ZAČÁTEK OPRAVY: Oprava chyby NameError a správné generování URL ===
             xbmcplugin.addDirectoryItem(_handle, get_url(action='db', file=params['file'], key=item['id']), listitem, True)
-            # === KONEC OPRAVY ===
     else:
         if os.path.exists(dbdir):
             dbfiles = [f for f in os.listdir(dbdir) if os.path.isfile(os.path.join(dbdir, f))]
@@ -700,101 +677,76 @@ def db(params):
     xbmcplugin.endOfDirectory(_handle, updateListing=updateListing)
 
 def menu():
-    """Opravené hlavní menu s požadovaným pořadím a názvy."""
     xbmcplugin.setPluginCategory(_handle, _addon.getAddonInfo('name'))
-
-    # 1. Vyhledávání v mé databázi - NOVÝ NÁZEV
     list_item = xbmcgui.ListItem(label='Vyhledávání v mé databázi')
     list_item.setArt({'icon': 'DefaultAddonsSearch.png'})
     xbmcplugin.addDirectoryItem(_handle, get_url(action='search_my_db'), list_item, True)
-
-    # 2. Vyhledávání Webshare - NOVÝ NÁZEV
     list_item = xbmcgui.ListItem(label='Vyhledávání na Webshare')
     list_item.setArt({'icon': 'DefaultFolder.png'})
     xbmcplugin.addDirectoryItem(_handle, get_url(action='search'), list_item, True)
-    
-    # 3. Filmy
     list_item = xbmcgui.ListItem(label='Filmy')
     list_item.setArt({'icon': 'DefaultMovies.png'})
     xbmcplugin.addDirectoryItem(_handle, get_url(action='movies_menu'), list_item, True)
-
-    # 4. Seriály
     list_item = xbmcgui.ListItem(label='Seriály')
     list_item.setArt({'icon': 'DefaultTVShows.png'})
     xbmcplugin.addDirectoryItem(_handle, get_url(action='shows_menu'), list_item, True)
-    
-    # 5. Dokumenty
     list_item = xbmcgui.ListItem(label='Dokumenty')
     list_item.setArt({'icon': ICON_DOCUMENTS})
     xbmcplugin.addDirectoryItem(_handle, get_url(action='show_top_documents_from_db'), list_item, True)
-    
-    # 6. Koncerty
     list_item = xbmcgui.ListItem(label='Koncerty')
     list_item.setArt({'icon': ICON_KONCERTY})
     xbmcplugin.addDirectoryItem(_handle, get_url(action='show_top_koncerty_from_db'), list_item, True)
-
-    # TV tipy dne z ČSFD (POSLEDNÍ před Nastavením)
     list_item = xbmcgui.ListItem(label='TV tipy dne z ČSFD')
     list_item.setArt({'icon': ICON_CHANNELS})
     xbmcplugin.addDirectoryItem(_handle, get_url(action='tv_tips_menu'), list_item, True)
-
-
-    # Poslední: Nastavení doplňku
-    list_item = xbmcgui.ListItem(label=_addon.getLocalizedString(30204)) # Popisek "Nastavení"
+    list_item = xbmcgui.ListItem(label=_addon.getLocalizedString(30204))
     list_item.setArt({'icon': 'DefaultAddonService.png'})
     xbmcplugin.addDirectoryItem(_handle, get_url(action='settings'), list_item, False)
-
     xbmcplugin.endOfDirectory(_handle)
+    if VIEW_ID_LIST and VIEW_ID_LIST != '0':
+        xbmc.executebuiltin(f'Container.SetViewMode({VIEW_ID_LIST})')
 
 def movies_menu():
     xbmcplugin.setPluginCategory(_handle, 'Filmy')
-    
     list_item = xbmcgui.ListItem(label='Historie sledování')
     list_item.setArt({'icon': 'DefaultVideo.png'})
     xbmcplugin.addDirectoryItem(_handle, get_url(action='list_watched_movies'), list_item, True)
-
     list_item = xbmcgui.ListItem(label='Vše')
     list_item.setArt({'icon': 'DefaultMovies.png'})
     xbmcplugin.addDirectoryItem(_handle, get_url(action='list_all_my_movies'), list_item, True)
-
     list_item = xbmcgui.ListItem(label='Žánry')
     list_item.setArt({'icon': 'DefaultGenre.png'})
     xbmcplugin.addDirectoryItem(_handle, get_url(action='list_movie_genres'), list_item, True)
-    
     list_item = xbmcgui.ListItem(label='Top Hudební')
     list_item.setArt({'icon': ICON_HUDEBNI})
     xbmcplugin.addDirectoryItem(_handle, get_url(action='show_top_hudebni_from_db'), list_item, True)
-
     list_item = xbmcgui.ListItem(label='Top Pohádky')
     list_item.setArt({'icon': ICON_POHADKY})
     xbmcplugin.addDirectoryItem(_handle, get_url(action='show_top_pohadky_from_db'), list_item, True)
-    
     list_item = xbmcgui.ListItem(label='Nejlépe hodnocené ČSFD')
     list_item.setArt({'icon': ICON_FAVOURITES})
     xbmcplugin.addDirectoryItem(_handle, get_url(action='show_top_movies_from_db'), list_item, True)
-
     xbmcplugin.endOfDirectory(_handle)
+    if VIEW_ID_LIST and VIEW_ID_LIST != '0':
+        xbmc.executebuiltin(f'Container.SetViewMode({VIEW_ID_LIST})')
 
 def shows_menu():
     xbmcplugin.setPluginCategory(_handle, 'Seriály')
-    
     list_item = xbmcgui.ListItem(label='Historie sledování')
     list_item.setArt({'icon': 'DefaultVideo.png'})
     xbmcplugin.addDirectoryItem(_handle, get_url(action='list_watched_shows'), list_item, True)
-
     list_item = xbmcgui.ListItem(label='Vše')
     list_item.setArt({'icon': 'DefaultTVShows.png'})
     xbmcplugin.addDirectoryItem(_handle, get_url(action='list_all_my_shows'), list_item, True)
-    
     list_item = xbmcgui.ListItem(label='Žánry')
     list_item.setArt({'icon': 'DefaultGenre.png'})
     xbmcplugin.addDirectoryItem(_handle, get_url(action='list_show_genres'), list_item, True)
-    
     list_item = xbmcgui.ListItem(label='Nejlépe hodnocené ČSFD')
     list_item.setArt({'icon': ICON_FAVOURITES})
     xbmcplugin.addDirectoryItem(_handle, get_url(action='show_top_shows_from_db'), list_item, True)
-
     xbmcplugin.endOfDirectory(_handle)
+    if VIEW_ID_LIST and VIEW_ID_LIST != '0':
+        xbmc.executebuiltin(f'Container.SetViewMode({VIEW_ID_LIST})')
 
 def list_watched_movies():
     xbmcplugin.setPluginCategory(_handle, 'Historie sledování filmů')
@@ -803,27 +755,22 @@ def list_watched_movies():
         response = _session.get(f"{BACKEND_URL}/Database/history/movies")
         response.raise_for_status()
         movies = response.json()
-        
         unique_movies = {}
         for movie in movies:
             media_id = movie.get('mediaId', movie.get('id'))
             if media_id not in unique_movies: 
                  unique_movies[media_id] = movie
-        
         filtered_movies = list(unique_movies.values())
-
         if not filtered_movies:
             xbmcgui.Dialog().ok("Historie je prázdná", "Žádné filmy nebyly zatím sledovány.")
         else:
             for movie in filtered_movies:
                 _add_movie_list_item(movie, is_history=True)
-
     except Exception as e:
         xbmc.log(f"Chyba při načítání historie filmů: {traceback.format_exc()}", xbmc.LOGERROR)
-        xbmcgui.Dialog().ok("Chyba Backendu", f"Nepodařilo se načíst historii filmů.\nDetail: {e}")
-
     xbmcplugin.endOfDirectory(_handle)
-
+    if VIEW_ID_LIST and VIEW_ID_LIST != '0':
+        xbmc.executebuiltin(f'Container.SetViewMode({VIEW_ID_LIST})')
 
 def list_watched_shows():
     xbmcplugin.setPluginCategory(_handle, 'Historie sledování seriálů')
@@ -832,26 +779,22 @@ def list_watched_shows():
         response = _session.get(f"{BACKEND_URL}/Database/history/shows")
         response.raise_for_status()
         shows = response.json()
-        
         unique_shows = {}
         for show in shows:
             media_id = show.get('mediaId', show.get('id'))
             if media_id not in unique_shows:
                 unique_shows[media_id] = show
-        
         filtered_shows = list(unique_shows.values())
-
         if not filtered_shows:
             xbmcgui.Dialog().ok("Historie je prázdná", "Žádné seriály nebyly zatím sledovány.")
         else:
             for show in filtered_shows:
                 _add_show_list_item(show, is_history=True)
-    
     except Exception as e:
         xbmc.log(f"Chyba při načítání historie seriálů: {traceback.format_exc()}", xbmc.LOGERROR)
-        xbmcgui.Dialog().ok("Chyba Backendu", f"Nepodařilo se načíst historii seriálů.\nDetail: {e}")
-
     xbmcplugin.endOfDirectory(_handle)
+    if VIEW_ID_LIST and VIEW_ID_LIST != '0':
+        xbmc.executebuiltin(f'Container.SetViewMode({VIEW_ID_LIST})')
 
 def list_movie_genres():
     xbmcplugin.setPluginCategory(_handle, 'Žánry filmů')
@@ -859,7 +802,6 @@ def list_movie_genres():
         response = _session.get(f"{BACKEND_URL}/Movies")
         response.raise_for_status()
         movies = response.json()
-        
         genres_dict = defaultdict(list)
         for movie in movies:
             genres_data = movie.get('genres', [])
@@ -867,20 +809,17 @@ def list_movie_genres():
                 genre_list = [g.strip() for g in genres_data.split('/')]
             else:
                 genre_list = [g['name'] for g in genres_data]
-            
             for genre in genre_list:
                 genres_dict[genre].append(movie)
-
         for genre, movies_list in sorted(genres_dict.items()):
             list_item = xbmcgui.ListItem(label=genre)
             url = get_url(action='list_movies_by_genre', genre=genre)
             xbmcplugin.addDirectoryItem(_handle, url=url, listitem=list_item, isFolder=True)
-
     except Exception as e:
         xbmc.log(f"Chyba při načítání žánrů filmů: {traceback.format_exc()}", xbmc.LOGERROR)
-        xbmcgui.Dialog().ok("Chyba Backendu", f"Nepodařilo se načíst žánry filmů.\nDetail: {e}")
-
     xbmcplugin.endOfDirectory(_handle)
+    if VIEW_ID_LIST and VIEW_ID_LIST != '0':
+        xbmc.executebuiltin(f'Container.SetViewMode({VIEW_ID_LIST})')
 
 def list_show_genres():
     xbmcplugin.setPluginCategory(_handle, 'Žánry seriálů')
@@ -888,7 +827,6 @@ def list_show_genres():
         response = _session.get(f"{BACKEND_URL}/Shows")
         response.raise_for_status()
         shows = response.json()
-        
         genres_dict = defaultdict(list)
         for show in shows:
             genres_data = show.get('genres', [])
@@ -896,20 +834,17 @@ def list_show_genres():
                 genre_list = [g.strip() for g in genres_data.split('/')]
             else:
                 genre_list = [g['name'] for g in genres_data]
-            
             for genre in genre_list:
                 genres_dict[genre].append(show)
-
         for genre, shows_list in sorted(genres_dict.items()):
             list_item = xbmcgui.ListItem(label=genre)
             url = get_url(action='list_shows_by_genre', genre=genre)
             xbmcplugin.addDirectoryItem(_handle, url=url, listitem=list_item, isFolder=True)
-
     except Exception as e:
         xbmc.log(f"Chyba při načítání žánrů seriálů: {traceback.format_exc()}", xbmc.LOGERROR)
-        xbmcgui.Dialog().ok("Chyba Backendu", f"Nepodařilo se načíst žánry seriálů.\nDetail: {e}")
-
     xbmcplugin.endOfDirectory(_handle)
+    if VIEW_ID_LIST and VIEW_ID_LIST != '0':
+        xbmc.executebuiltin(f'Container.SetViewMode({VIEW_ID_LIST})')
 
 def list_movies_by_genre(params):
     genre = params.get('genre')
@@ -919,19 +854,17 @@ def list_movies_by_genre(params):
         response = _session.get(f"{BACKEND_URL}/Movies")
         response.raise_for_status()
         movies = response.json()
-        
         for movie in movies:
             genres_data = movie.get('genres', [])
             if isinstance(genres_data, str) and genre in genres_data:
                 _add_movie_list_item(movie)
             elif isinstance(genres_data, list) and any(g['name'] == genre for g in genres_data):
                 _add_movie_list_item(movie)
-
     except Exception as e:
         xbmc.log(f"Chyba při načítání filmů podle žánru: {traceback.format_exc()}", xbmc.LOGERROR)
-        xbmcgui.Dialog().ok("Chyba Backendu", f"Nepodařilo se načíst filmy pro žánr {genre}.\nDetail: {e}")
-
     xbmcplugin.endOfDirectory(_handle)
+    if VIEW_ID_LIST and VIEW_ID_LIST != '0':
+        xbmc.executebuiltin(f'Container.SetViewMode({VIEW_ID_LIST})')
 
 def list_shows_by_genre(params):
     genre = params.get('genre')
@@ -941,19 +874,17 @@ def list_shows_by_genre(params):
         response = _session.get(f"{BACKEND_URL}/Shows")
         response.raise_for_status()
         shows = response.json()
-        
         for show in shows:
             genres_data = show.get('genres', [])
             if isinstance(genres_data, str) and genre in genres_data:
                 _add_show_list_item(show)
             elif isinstance(genres_data, list) and any(g['name'] == genre for g in genres_data):
                 _add_show_list_item(show)
-
     except Exception as e:
         xbmc.log(f"Chyba při načítání seriálů podle žánru: {traceback.format_exc()}", xbmc.LOGERROR)
-        xbmcgui.Dialog().ok("Chyba Backendu", f"Nepodařilo se načíst seriály pro žánr {genre}.\nDetail: {e}")
-
     xbmcplugin.endOfDirectory(_handle)
+    if VIEW_ID_LIST and VIEW_ID_LIST != '0':
+        xbmc.executebuiltin(f'Container.SetViewMode({VIEW_ID_LIST})')
 
 def _add_movie_list_item(movie, is_history=False, rank=None, rank_prefix=None):
     links = movie.get('links', [])
@@ -964,7 +895,6 @@ def _add_movie_list_item(movie, is_history=False, rank=None, rank_prefix=None):
     else:
         genres = [g['name'] for g in genres_data]
         genres_str = ' / '.join(genres) if genres else 'Neznámý'
-    
     year = movie.get('releaseYear', '????')
     runtime_minutes = movie.get('runtime', 0)
     duration_str = "????"
@@ -972,39 +902,27 @@ def _add_movie_list_item(movie, is_history=False, rank=None, rank_prefix=None):
         hours = runtime_minutes // 60
         minutes = runtime_minutes % 60
         duration_str = f"{hours}h:{minutes:02d}m" if hours > 0 else f"{minutes}m"
-    
     if rank_prefix:
         label_prefix = f"{rank_prefix}"
     elif rank is not None:
         label_prefix = f"{rank}. "
     else:
         label_prefix = "CZ - "
-        
     label = f"{label_prefix}{title} ({year}) | {genres_str}"
-    
     if is_history:
         label = f"[Historie] {label}"
-    
     list_item = xbmcgui.ListItem(label=label)
     list_item.setLabel2(f"{duration_str}")
-
-    info = {
-        'mediatype': 'movie',
-        'title': title,
-        'plot': movie.get('overview')
-    }
+    info = {'mediatype': 'movie', 'title': title, 'plot': movie.get('overview')}
     if year != '????': info['year'] = year
     if isinstance(genres_data, str): info['genre'] = genres_data
     elif genres_data: info['genre'] = genres
     if runtime_minutes > 0: info['duration'] = runtime_minutes * 60
-
     list_item.setInfo('video', info)
-    
     poster = movie.get('posterPath')
     if poster:
         poster_url = f"https://image.tmdb.org/t/p/w500{poster}"
         list_item.setArt({'icon': poster_url, 'thumb': poster_url, 'poster': poster_url})
-    
     if len(links) == 1:
         playable_url = get_url(action='play', ident=links[0]['fileIdent'], name=title, media_id=movie['id'], media_type='Movie')
         list_item.setProperty('IsPlayable', 'true')
@@ -1023,51 +941,41 @@ def _add_show_list_item(show, is_history=False, rank=None, rank_prefix=None):
     else:
         genres = [g['name'] for g in genres_data]
         genres_str = ' / '.join(genres) if genres else "Neznámý"
-
     if rank_prefix:
         label_prefix = f"{rank_prefix}"
     elif rank is not None:
         label_prefix = f"{rank}. "
     else:
         label_prefix = "CZ - "
-        
     label = f"{label_prefix}{title} | {genres_str}"
-    
     if is_history:
         label = f"[Historie] {label}"
-        
     list_item = xbmcgui.ListItem(label=label)
     info = {'plot': show.get('overview'), 'mediatype': 'tvshow', 'title': title}
     if isinstance(genres_data, str): info['genre'] = genres_data
     elif genres_data: info['genre'] = genres
     list_item.setInfo('video', info)
-    
     poster = show.get('posterPath')
     if poster:
         poster_url = f"https://image.tmdb.org/t/p/w500{poster}"
         list_item.setArt({'thumb': poster_url, 'icon': poster_url, 'poster': poster_url})
-    
     url = get_url(action='list_seasons', show_id=show.get('id'))
     xbmcplugin.addDirectoryItem(_handle, url=url, listitem=list_item, isFolder=True)
-
 
 def list_all_my_movies():
     xbmcplugin.setContent(_handle, 'movies')
     xbmcplugin.setPluginCategory(_handle, 'Všechny filmy')
-    
     try:
         response = _session.get(f"{BACKEND_URL}/Movies")
         response.raise_for_status()
         movies = response.json()
-
         for movie in movies:
             _add_movie_list_item(movie)
-            
     except Exception as e:
         xbmc.log(f"Chyba ve funkci list_all_my_movies: {traceback.format_exc()}", xbmc.LOGERROR)
-        xbmcgui.Dialog().ok("Chyba Backendu", f"Nepodařilo se načíst filmy.\nDetail: {e}")
-    
     xbmcplugin.endOfDirectory(_handle)
+    if VIEW_ID_LIST and VIEW_ID_LIST != '0':
+        xbmc.executebuiltin(f'Container.SetViewMode({VIEW_ID_LIST})')
 
 def list_all_my_shows():
     xbmcplugin.setPluginCategory(_handle, 'Všechny seriály')
@@ -1076,26 +984,21 @@ def list_all_my_shows():
         response = _session.get(f"{BACKEND_URL}/Shows")
         response.raise_for_status()
         shows = response.json()
-
         for show in shows:
             _add_show_list_item(show)
-
     except Exception as e:
         xbmc.log(f"Chyba ve funkci list_all_my_shows: {traceback.format_exc()}", xbmc.LOGERROR)
-        xbmcgui.Dialog().ok("Chyba Backendu", f"Nepodařilo se načíst seriály.\nDetail: {e}")
-
     xbmcplugin.endOfDirectory(_handle)
+    if VIEW_ID_LIST and VIEW_ID_LIST != '0':
+        xbmc.executebuiltin(f'Container.SetViewMode({VIEW_ID_LIST})')
 
 def list_seasons(params):
     show_id = params.get('show_id')
-
     xbmcplugin.setContent(_handle, 'seasons')
-    
     try:
         response = _session.get(f"{BACKEND_URL}/Shows/{show_id}")
         response.raise_for_status()
         show_details = response.json()
-        
         available_languages = set()
         for season in show_details.get('seasons', []):
             if 'episodes' in season:
@@ -1115,35 +1018,28 @@ def list_seasons(params):
                                             lang = stream.get('language', '')
                                             if lang:
                                                 available_languages.add(lang.upper())
-
         languages_str = ' | '.join(sorted(list(available_languages))) if available_languages else 'Neznámý'
         xbmcplugin.setPluginCategory(_handle, f"Jazyky: ({languages_str})")
-        
         for season in show_details.get('seasons', []):
             season_number = season.get('seasonNumber')
             if season_number == 0: continue
-
             year = season.get('releaseYear', '????')
             title = f"Série {season_number}"
-            
             label = f"{title} ({year})" if year != '????' else title
             list_item = xbmcgui.ListItem(label=label)
             info = {'title': title, 'mediatype': 'season', 'tvshowtitle': show_details.get('title')}
             list_item.setInfo('video', info)
-
             poster = season.get('posterPath') or show_details.get('posterPath')
             if poster:
                  poster_url = f"https://image.tmdb.org/t/p/w500{poster}"
                  list_item.setArt({'icon': poster_url, 'thumb': poster_url, 'poster': poster_url})
-
             url = get_url(action='list_episodes', show_id=show_id, season_number=season_number)
             xbmcplugin.addDirectoryItem(_handle, url=url, listitem=list_item, isFolder=True)
-            
     except Exception as e:
         xbmc.log(f"Chyba ve funkci list_seasons: {traceback.format_exc()}", xbmc.LOGERROR)
-        xbmcgui.Dialog().ok("Chyba Backendu", f"Nepodařilo se načíst sezóny.\nDetail: {e}")
-        
     xbmcplugin.endOfDirectory(_handle)
+    if VIEW_ID_LIST and VIEW_ID_LIST != '0':
+        xbmc.executebuiltin(f'Container.SetViewMode({VIEW_ID_LIST})')
 
 def list_episodes(params):
     show_id = params.get('show_id')
@@ -1152,25 +1048,19 @@ def list_episodes(params):
         popinfo("Chyba: Chybí číslo sezóny.", icon=xbmcgui.NOTIFICATION_ERROR)
         return
     season_number = int(season_number_str)
-
     xbmcplugin.setContent(_handle, 'episodes')
-    
     try:
         response = _session.get(f"{BACKEND_URL}/Shows/{show_id}")
         response.raise_for_status()
         show_details = response.json()
-        
         xbmcplugin.setPluginCategory(_handle, f"{show_details.get('title')} - Série {season_number}")
         target_season = next((s for s in show_details.get('seasons', []) if int(s.get('seasonNumber', -1)) == season_number), None)
-
         if target_season:
             for episode in target_season.get('episodes', []):
                 links = episode.get('links', [])
                 if not links: continue
-                
                 episode_title = episode.get('title')
                 episode_number = episode.get('episodeNumber')
-                
                 runtime_minutes = episode.get('runtime')
                 duration_str = "???"
                 if runtime_minutes and runtime_minutes > 0:
@@ -1178,28 +1068,16 @@ def list_episodes(params):
                     hours = runtime_minutes // 60
                     minutes = runtime_minutes % 60
                     duration_str = f"{hours}h:{minutes:02d}m" if hours > 0 else f"{minutes}m"
-
                 label = f"CZ - {episode_number}. {episode_title}"
-                
                 list_item = xbmcgui.ListItem(label=label)
                 list_item.setLabel2(f"{duration_str}")
-
-                info = {
-                    'mediatype': 'episode', 'title': episode_title,
-                    'plot': episode.get('overview'), 'tvshowtitle': show_details.get('title'),
-                    'season': season_number, 'episode': episode_number
-                }
-
-                if runtime_minutes > 0:
-                    info['duration'] = runtime_minutes * 60
-
+                info = {'mediatype': 'episode', 'title': episode_title, 'plot': episode.get('overview'), 'tvshowtitle': show_details.get('title'), 'season': season_number, 'episode': episode_number}
+                if runtime_minutes > 0: info['duration'] = runtime_minutes * 60
                 list_item.setInfo('video', info)
-                
                 still = episode.get('stillPath')
                 if still:
                     still_url = f"https://image.tmdb.org/t/p/w500{still}"
                     list_item.setArt({'icon': still_url, 'thumb': still_url})
-
                 if len(links) == 1:
                     playable_url = get_url(action='play', ident=links[0]['fileIdent'], name=episode_title, media_id=show_id, media_type='Show')
                     list_item.setProperty('IsPlayable', 'true')
@@ -1208,78 +1086,63 @@ def list_episodes(params):
                     playable_url = get_url(action='select_link', links=json.dumps(links), name=episode_title, media_id=show_id, media_type='Show')
                     list_item.setProperty('IsPlayable', 'true')
                     is_folder = False
-
                 xbmcplugin.addDirectoryItem(_handle, url=playable_url, listitem=list_item, isFolder=is_folder)
         else:
             popinfo(f"Nenalezena sezóna číslo {season_number} v datech z API.", icon=xbmcgui.NOTIFICATION_WARNING)
-            
     except Exception as e:
         xbmc.log(f"Chyba ve funkci list_episodes: {traceback.format_exc()}", xbmc.LOGERROR)
-        xbmcgui.Dialog().ok("Chyba Backendu", f"Nepodařilo se načíst epizody.\nDetail: {e}")
-        
     xbmcplugin.endOfDirectory(_handle)
+    if VIEW_ID_LIST and VIEW_ID_LIST != '0':
+        xbmc.executebuiltin(f'Container.SetViewMode({VIEW_ID_LIST})')
 
 def search_my_db():
     query = ask(None)
     if not query: return
-
     xbmcplugin.setPluginCategory(_handle, f'Hledám v mé DB: {query}')
     try:
         response = _session.get(f"{BACKEND_URL}/Search", params={'query': query})
         response.raise_for_status()
         results = response.json()
-        
         if not results: 
             popinfo("Nebyly nalezeny žádné výsledky.")
             xbmcplugin.endOfDirectory(_handle)
             return
-        
         for item in results:
             if not item.get('id') or not item.get('type') or not item.get('title'):
                 xbmc.log(f"Search result item missing critical key: {item}", xbmc.LOGWARNING)
                 continue
-
             if item.get('type') == 'Movie':
                 _add_movie_list_item(item)
             elif item.get('type') == 'Show':
                 _add_show_list_item(item)
-            
     except Exception as e:
         xbmc.log(f"Chyba při vyhledávání v DB: {traceback.format_exc()}", xbmc.LOGERROR)
-        xbmcgui.Dialog().ok("Chyba Backendu", f"Nepodařilo se provést vyhledávání.\nDetail: {e}")
-        
     xbmcplugin.endOfDirectory(_handle)
+    if VIEW_ID_LIST and VIEW_ID_LIST != '0':
+        xbmc.executebuiltin(f'Container.SetViewMode({VIEW_ID_LIST})')
 
 def search_webshare(params):
     search(params)
     
-# ==============================================================================
-# === FUNKCE PRO VLASTNÍ DIALOG ===
-# ==============================================================================
-
 def select_link(params):
     links_json = params.get('links', '[]')
     title = params.get('name', 'Video')
     media_id = params.get('media_id')
     media_type = params.get('media_type')
-
     links = json.loads(links_json)
     if not links:
         xbmcplugin.setResolvedUrl(_handle, False, xbmcgui.ListItem())
         return
-        
     options = []
     token = revalidate()
     for link in links:
         ident = link.get('fileIdent')
-        
         try:
             xml_info = getinfo(ident, token)
             if xml_info:
                 info = todict(xml_info)
                 size = sizelize(info.get('size', '0'))
                 bitrate = sizelize(info.get('bitrate', '0'), ['bps', 'Kbps', 'Mbps', 'Gbps'])
-                
                 video_quality_str = "N/A"
                 try:
                     video_stream = info.get('video', {}).get('stream')
@@ -1287,7 +1150,6 @@ def select_link(params):
                         if isinstance(video_stream, list):
                             video_stream = video_stream[0]
                         height = int(video_stream.get('height', 0))
-                        
                         if height >= 2160: video_quality_str = "4K"
                         elif height >= 1080: video_quality_str = "1080p"
                         elif height >= 720: video_quality_str = "720p"
@@ -1296,7 +1158,6 @@ def select_link(params):
                         elif height > 0: video_quality_str = "SD"
                 except Exception:
                     video_quality_str = "N/A"
-                
                 audio_streams_info = ""
                 if 'audio' in info and 'stream' in info['audio']:
                     audio_streams = info['audio']['stream']
@@ -1308,45 +1169,29 @@ def select_link(params):
                         audio_info_list.append(lang.upper() if lang else 'Neznámý')
                     if audio_info_list:
                         audio_streams_info = f"Zvuk: ({' | '.join(audio_info_list)})"
-
                 sub_info_str = ""
                 if 'subtitles' in info and 'subtitles' in info['subtitles']:
                     subs = info['subtitles']['subtitles']
                     if subs:
                         sub_list = subs.split(',')
                         sub_info_str = f"Tit: ({', '.join(s.upper() for s in sub_list)})"
-                
-                full_info_parts = [
-                    video_quality_str,
-                    size,
-                    f"({bitrate})",
-                ]
-                if audio_streams_info:
-                    full_info_parts.append(audio_streams_info)
-                if sub_info_str:
-                    full_info_parts.append(sub_info_str)
-                
+                full_info_parts = [video_quality_str, size, f"({bitrate})"]
+                if audio_streams_info: full_info_parts.append(audio_streams_info)
+                if sub_info_str: full_info_parts.append(sub_info_str)
                 options.append(' | '.join(full_info_parts))
             else:
                 options.append(f"Chyba: Nepodařilo se načíst informace o souboru")
         except Exception as e:
             options.append(f"Chyba při načítání informací: {e}")
             xbmc.log(f"Chyba při načítání informací o odkazu {ident}: {e}", xbmc.LOGERROR)
-
     dialog = xbmcgui.Dialog()
     selected_index = dialog.select(f"Vyberte kvalitu pro: {title}", options)
-    
     if selected_index != -1:
         selected_link = links[selected_index]
         ident = selected_link.get('fileIdent')
-        
         play(params={'ident': ident, 'name': title, 'media_id': media_id, 'media_type': media_type})
     else:
         xbmcplugin.setResolvedUrl(_handle, False, xbmcgui.ListItem())
-
-# ==============================================================================
-# === NOVÉ FUNKCE PRO ZOBRAZENÍ TOP ČSFD Z DB ===
-# ==============================================================================
 
 def get_movies_from_db():
     try:
@@ -1357,7 +1202,6 @@ def get_movies_from_db():
         return movie_dict
     except Exception as e:
         xbmc.log(f"Chyba při načítání filmů z DB: {traceback.format_exc()}", xbmc.LOGERROR)
-        xbmcgui.Dialog().ok("Chyba Backendu", f"Nepodařilo se načíst filmy z databáze.\nDetail: {e}")
         return {}
 
 def get_shows_from_db():
@@ -1369,10 +1213,49 @@ def get_shows_from_db():
         return show_dict
     except Exception as e:
         xbmc.log(f"Chyba při načítání seriálů z DB: {traceback.format_exc()}", xbmc.LOGERROR)
-        xbmcgui.Dialog().ok("Chyba Backendu", f"Nepodařilo se načíst seriály z databáze.\nDetail: {e}")
         return {}
         
+# === ZAČÁTEK ZMĚNY: Oprava a sjednocení stahování žebříčků ===
+def scrape_csfd_chart(base_url, max_pages=5):
+    all_titles = []
+    is_general_chart = '/filmy/nejlepsi' in base_url or '/serialy/nejlepsi' in base_url
+    
+    for i in range(max_pages):
+        if is_general_chart:
+            offset = i * 100
+            url = f"{base_url}?from={offset}" if i > 0 else base_url
+        else:
+            page_num = i + 1
+            # Ujistíme se, že &page= se přidává správně
+            url = f"{base_url}&page={page_num}" if '?' in base_url else f"{base_url}?page={page_num}"
+            if i == 0: url = base_url
+
+        try:
+            xbmc.log(f"[CSFD Scraper] Stahuji stránku: {url}", level=xbmc.LOGINFO)
+            response = _session.get(url)
+            response.raise_for_status()
+            html = response.text
+            
+            titles_on_page = re.findall(r'title="([^"]+)" class="film-title-name"', html)
+            
+            if not titles_on_page and i > 0:
+                xbmc.log("[CSFD Scraper] Na stránce nebyly nalezeny žádné další tituly, končím.", level=xbmc.LOGINFO)
+                break
+            
+            all_titles.extend(titles_on_page)
+            
+        except Exception as e:
+            xbmc.log(f"Chyba při stahování nebo parsování ČSFD URL {url}: {e}", xbmc.LOGERROR)
+            break
+
+    seen = set()
+    unique_titles = [x for x in all_titles if not (x in seen or seen.add(x))]
+    
+    xbmc.log(f"[CSFD Scraper] Celkem staženo {len(unique_titles)} unikátních titulů.", level=xbmc.LOGINFO)
+    return unique_titles
+
 def get_csfd_titles_list(url):
+    # Tato funkce je nyní jen pro TV tipy, kde není stránkování
     try:
         response = _session.get(url)
         response.raise_for_status()
@@ -1380,24 +1263,20 @@ def get_csfd_titles_list(url):
         
         if "televize" in url:
              program_items = re.findall(r'<a href="/(film|serial)/[^/]+/"[^>]*>(.*?)</a>', html, re.DOTALL)
-             
              clean_titles = []
-             for media_type, title_raw in program_items:
+             for _, title_raw in program_items:
                  title = re.sub(r'<[^>]+>', '', title_raw).strip()
-                 clean_title = re.sub(r'\s*\(\d{4}\)', '', title).strip() 
-                 clean_title = clean_title.split('|')[0].strip()
-                 
+                 clean_title = re.sub(r'\s*\(\d{4}\)', '', title).strip().split('|')[0].strip()
                  if clean_title and clean_title not in clean_titles:
                     clean_titles.append(clean_title) 
              return clean_titles
         else:
-             titles = re.findall(r'title="([^"]+)" class="film-title-name"', html)
-             return titles
-
+             # Fallback pro jednu stránku, pokud by se zavolala s žebříčkem
+             return re.findall(r'title="([^"]+)" class="film-title-name"', html)
     except Exception as e:
         xbmc.log(f"Chyba při volání/scrapingu ČSFD: {traceback.format_exc()}", xbmc.LOGERROR)
-        xbmcgui.Dialog().ok("Chyba Scraperu", f"Nepodařilo se stáhnout žebříček z ČSFD.\nDetail: {e}")
         return []
+# === KONEC ZMĚNY ===
 
 def normalize_title(title):
     if not title: return ''
@@ -1410,7 +1289,7 @@ def show_top_movies_from_db(params):
     CSFD_TOP_URL = "https://www.csfd.cz/zebricky/filmy/nejlepsi/"
     try:
         db_movies = get_movies_from_db()
-        csfd_titles = get_csfd_titles_list(CSFD_TOP_URL)
+        csfd_titles = scrape_csfd_chart(CSFD_TOP_URL, max_pages=5) # OPRAVA
         found_count = 0
         for i, csfd_title in enumerate(csfd_titles):
             normalized_csfd_title = normalize_title(csfd_title)
@@ -1418,13 +1297,10 @@ def show_top_movies_from_db(params):
                 movie = db_movies[normalized_csfd_title]
                 _add_movie_list_item(movie, rank=i + 1)
                 found_count += 1
-        if found_count == 0:
-            xbmcgui.Dialog().ok("Prázdný seznam", "V databázi nebyly nalezeny žádné filmy z TOP žebříčku ČSFD.")
-    except Exception as e:
-        xbmc.log(f"Chyba při načítání Top ČSFD filmů z DB: {traceback.format_exc()}", xbmc.LOGERROR)
-        xbmcgui.Dialog().ok("Chyba Backendu", f"Nepodařilo se načíst filmy.\nDetail: {e}")
-
+        if found_count == 0: xbmcgui.Dialog().ok("Prázdný seznam", "V databázi nebyly nalezeny žádné filmy z TOP žebříčku ČSFD.")
+    except Exception as e: xbmc.log(f"Chyba při načítání Top ČSFD filmů z DB: {traceback.format_exc()}", xbmc.LOGERROR)
     xbmcplugin.endOfDirectory(_handle)
+    if VIEW_ID_LIST and VIEW_ID_LIST != '0': xbmc.executebuiltin(f'Container.SetViewMode({VIEW_ID_LIST})')
 
 def show_top_shows_from_db(params):
     xbmcplugin.setPluginCategory(_handle, 'Nejlépe hodnocené seriály ČSFD (Vaše DB)')
@@ -1432,7 +1308,7 @@ def show_top_shows_from_db(params):
     CSFD_TOP_URL = "https://www.csfd.cz/zebricky/serialy/nejlepsi/"
     try:
         db_shows = get_shows_from_db()
-        csfd_titles = get_csfd_titles_list(CSFD_TOP_URL)
+        csfd_titles = scrape_csfd_chart(CSFD_TOP_URL, max_pages=5) # OPRAVA
         found_count = 0
         for i, csfd_title in enumerate(csfd_titles):
             normalized_csfd_title = normalize_title(csfd_title)
@@ -1440,13 +1316,10 @@ def show_top_shows_from_db(params):
                 show = db_shows[normalized_csfd_title]
                 _add_show_list_item(show, rank=i + 1)
                 found_count += 1
-        if found_count == 0:
-            xbmcgui.Dialog().ok("Prázdný seznam", "V databázi nebyly nalezeny žádné seriály z TOP žebříčku ČSFD.")
-    except Exception as e:
-        xbmc.log(f"Chyba při načítání Top ČSFD seriálů z DB: {traceback.format_exc()}", xbmc.LOGERROR)
-        xbmcgui.Dialog().ok("Chyba Backendu", f"Nepodařilo se načíst seriály.\nDetail: {e}")
-
+        if found_count == 0: xbmcgui.Dialog().ok("Prázdný seznam", "V databázi nebyly nalezeny žádné seriály z TOP žebříčku ČSFD.")
+    except Exception as e: xbmc.log(f"Chyba při načítání Top ČSFD seriálů z DB: {traceback.format_exc()}", xbmc.LOGERROR)
     xbmcplugin.endOfDirectory(_handle)
+    if VIEW_ID_LIST and VIEW_ID_LIST != '0': xbmc.executebuiltin(f'Container.SetViewMode({VIEW_ID_LIST})')
 
 def show_top_documents_from_db(params):
     xbmcplugin.setPluginCategory(_handle, 'Dokumenty ČSFD (Vaše DB)')
@@ -1454,7 +1327,7 @@ def show_top_documents_from_db(params):
     CSFD_TOP_URL = "https://www.csfd.cz/zebricky/vlastni-vyber/?filter=rlW0rKOyVwbmYPWipzyanJ4vBz51oTjfVzqyoaWyVwcoZGAqYPW5MJSlK2Mlo20vBz51oTjfVayyLKWsqT8vBz51oTjfVzSwqT9lVwcoKFjvMTylMJA0o3VvBygqsD"
     try:
         db_shows = get_shows_from_db()
-        csfd_titles = get_csfd_titles_list(CSFD_TOP_URL)
+        csfd_titles = scrape_csfd_chart(CSFD_TOP_URL, max_pages=5) # OPRAVA
         found_count = 0
         for i, csfd_title in enumerate(csfd_titles):
             normalized_csfd_title = normalize_title(csfd_title)
@@ -1462,13 +1335,10 @@ def show_top_documents_from_db(params):
                 show = db_shows[normalized_csfd_title]
                 _add_show_list_item(show, rank=i + 1)
                 found_count += 1
-        if found_count == 0:
-            xbmcgui.Dialog().ok("Prázdný seznam", "V databázi nebyly nalezeny žádné dokumenty z tohoto žebříčku ČSFD.")
-    except Exception as e:
-        xbmc.log(f"Chyba při načítání žebříčku dokumentů: {traceback.format_exc()}", xbmc.LOGERROR)
-        xbmcgui.Dialog().ok("Chyba", f"Nepodařilo se načíst žebříček dokumentů.\nDetail: {e}")
-
+        if found_count == 0: xbmcgui.Dialog().ok("Prázdný seznam", "V databázi nebyly nalezeny žádné dokumenty z tohoto žebříčku ČSFD.")
+    except Exception as e: xbmc.log(f"Chyba při načítání žebříčku dokumentů: {traceback.format_exc()}", xbmc.LOGERROR)
     xbmcplugin.endOfDirectory(_handle)
+    if VIEW_ID_LIST and VIEW_ID_LIST != '0': xbmc.executebuiltin(f'Container.SetViewMode({VIEW_ID_LIST})')
 
 def show_top_pohadky_from_db(params):
     xbmcplugin.setPluginCategory(_handle, 'Top Pohádky ČSFD (Vaše DB)')
@@ -1476,7 +1346,7 @@ def show_top_pohadky_from_db(params):
     CSFD_TOP_URL = "https://www.csfd.cz/zebricky/vlastni-vyber/?filter=rlW0rKOyVwbkYPWipzyanJ4vBz51oTjfVzqyoaWyVwcoZmOqYPW5MJSlK2Mlo20vBz51oTjfVayyLKWsqT8vBz51oTjfVzSwqT9lVwcoKFjvMTylMJA0o3VvBygqsD"
     try:
         db_movies = get_movies_from_db()
-        csfd_titles = get_csfd_titles_list(CSFD_TOP_URL)
+        csfd_titles = scrape_csfd_chart(CSFD_TOP_URL, max_pages=5) # OPRAVA
         found_count = 0
         for i, csfd_title in enumerate(csfd_titles):
             normalized_csfd_title = normalize_title(csfd_title)
@@ -1484,13 +1354,10 @@ def show_top_pohadky_from_db(params):
                 movie = db_movies[normalized_csfd_title]
                 _add_movie_list_item(movie, rank=i + 1)
                 found_count += 1
-        if found_count == 0:
-            xbmcgui.Dialog().ok("Prázdný seznam", "V databázi nebyly nalezeny žádné pohádky z tohoto žebříčku ČSFD.")
-    except Exception as e:
-        xbmc.log(f"Chyba při načítání žebříčku pohádek: {traceback.format_exc()}", xbmc.LOGERROR)
-        xbmcgui.Dialog().ok("Chyba", f"Nepodařilo se načíst žebříček pohádek.\nDetail: {e}")
-
+        if found_count == 0: xbmcgui.Dialog().ok("Prázdný seznam", "V databázi nebyly nalezeny žádné pohádky z tohoto žebříčku ČSFD.")
+    except Exception as e: xbmc.log(f"Chyba při načítání žebříčku pohádek: {traceback.format_exc()}", xbmc.LOGERROR)
     xbmcplugin.endOfDirectory(_handle)
+    if VIEW_ID_LIST and VIEW_ID_LIST != '0': xbmc.executebuiltin(f'Container.SetViewMode({VIEW_ID_LIST})')
 
 def show_top_hudebni_from_db(params):
     xbmcplugin.setPluginCategory(_handle, 'Top Hudební filmy ČSFD (Vaše DB)')
@@ -1498,7 +1365,7 @@ def show_top_hudebni_from_db(params):
     CSFD_TOP_URL = "https://www.csfd.cz/zebricky/vlastni-vyber/?filter=rlW0rKOyVwbkYPWipzyanJ4vBz51oTjfVzqyoaWyVwcoZwWqYPW5MJSlK2Mlo20vBz51oTjfVayyLKWsqT8vBz51oTjfVzSwqT9lVwcoKFjvMTylMJA0o3VvBygqsD"
     try:
         db_movies = get_movies_from_db()
-        csfd_titles = get_csfd_titles_list(CSFD_TOP_URL)
+        csfd_titles = scrape_csfd_chart(CSFD_TOP_URL, max_pages=5) # OPRAVA
         found_count = 0
         for i, csfd_title in enumerate(csfd_titles):
             normalized_csfd_title = normalize_title(csfd_title)
@@ -1506,13 +1373,10 @@ def show_top_hudebni_from_db(params):
                 movie = db_movies[normalized_csfd_title]
                 _add_movie_list_item(movie, rank=i + 1)
                 found_count += 1
-        if found_count == 0:
-            xbmcgui.Dialog().ok("Prázdný seznam", "V databázi nebyly nalezeny žádné hudební filmy z tohoto žebříčku ČSFD.")
-    except Exception as e:
-        xbmc.log(f"Chyba při načítání žebříčku hudebních filmů: {traceback.format_exc()}", xbmc.LOGERROR)
-        xbmcgui.Dialog().ok("Chyba", f"Nepodařilo se načíst žebříček hudebních filmů.\nDetail: {e}")
-
+        if found_count == 0: xbmcgui.Dialog().ok("Prázdný seznam", "V databázi nebyly nalezeny žádné hudební filmy z tohoto žebříčku ČSFD.")
+    except Exception as e: xbmc.log(f"Chyba při načítání žebříčku hudebních filmů: {traceback.format_exc()}", xbmc.LOGERROR)
     xbmcplugin.endOfDirectory(_handle)
+    if VIEW_ID_LIST and VIEW_ID_LIST != '0': xbmc.executebuiltin(f'Container.SetViewMode({VIEW_ID_LIST})')
 
 def show_top_koncerty_from_db(params):
     xbmcplugin.setPluginCategory(_handle, 'Koncerty ČSFD (Vaše DB)')
@@ -1520,7 +1384,7 @@ def show_top_koncerty_from_db(params):
     CSFD_TOP_URL = "https://www.csfd.cz/zebricky/vlastni-vyber/?filter=rlW0rKOyVwb2YPWipzyanJ4vBz51oTjfVzqyoaWyVwcoKFjvrJIupy9zpz9gVwchqJkfYPW5MJSlK3EiVwchqJkfYPWuL3EipvV6J10fVzEcpzIwqT9lVwcoKK0"
     try:
         db_movies = get_movies_from_db()
-        csfd_titles = get_csfd_titles_list(CSFD_TOP_URL)
+        csfd_titles = scrape_csfd_chart(CSFD_TOP_URL, max_pages=5) # OPRAVA
         found_count = 0
         for i, csfd_title in enumerate(csfd_titles):
             normalized_csfd_title = normalize_title(csfd_title)
@@ -1528,13 +1392,10 @@ def show_top_koncerty_from_db(params):
                 movie = db_movies[normalized_csfd_title]
                 _add_movie_list_item(movie, rank=i + 1)
                 found_count += 1
-        if found_count == 0:
-            xbmcgui.Dialog().ok("Prázdný seznam", "V databázi nebyly nalezeny žádné koncerty z tohoto žebříčku ČSFD.")
-    except Exception as e:
-        xbmc.log(f"Chyba při načítání žebříčku koncertů: {traceback.format_exc()}", xbmc.LOGERROR)
-        xbmcgui.Dialog().ok("Chyba", f"Nepodařilo se načíst žebříček koncertů.\nDetail: {e}")
-
+        if found_count == 0: xbmcgui.Dialog().ok("Prázdný seznam", "V databázi nebyly nalezeny žádné koncerty z tohoto žebříčku ČSFD.")
+    except Exception as e: xbmc.log(f"Chyba při načítání žebříčku koncertů: {traceback.format_exc()}", xbmc.LOGERROR)
     xbmcplugin.endOfDirectory(_handle)
+    if VIEW_ID_LIST and VIEW_ID_LIST != '0': xbmc.executebuiltin(f'Container.SetViewMode({VIEW_ID_LIST})')
 
 def tv_tips_menu():
     xbmcplugin.setPluginCategory(_handle, 'TV tipy dne z ČSFD')
@@ -1544,37 +1405,23 @@ def tv_tips_menu():
         db_movies = get_movies_from_db()
         db_shows = get_shows_from_db()
         db_content = dict(db_movies, **db_shows)
-        
         tv_titles = get_csfd_titles_list(CSFD_TV_URL) 
-        
         found_count = 0
-        
         for i, tv_title in enumerate(tv_titles):
             normalized_tv_title = normalize_title(tv_title)
-            
             if normalized_tv_title in db_content:
                 item = db_content[normalized_tv_title]
-                
                 if 'releaseYear' in item: 
-                    _add_movie_list_item(item)
+                    _add_movie_list_item(item, rank_prefix=f"TIP {i+1}:")
                 else: 
-                    _add_show_list_item(item)
-                    
+                    _add_show_list_item(item, rank_prefix=f"TIP {i+1}:")
                 found_count += 1
-                
         if found_count == 0:
             xbmcgui.Dialog().ok("Prázdný seznam", "V databázi nebyly nalezeny žádné TV tipy, které byste měl uložené.")
-            
     except Exception as e:
         xbmc.log(f"Chyba při načítání TV tipů: {traceback.format_exc()}", xbmc.LOGERROR)
-        xbmcgui.Dialog().ok("Chyba Backendu", f"Nepodařilo se načíst TV tipy.\nDetail: {e}")
-
     xbmcplugin.endOfDirectory(_handle)
-
-
-# ==============================================================================
-# === ROUTER ===
-# ==============================================================================
+    if VIEW_ID_LIST and VIEW_ID_LIST != '0': xbmc.executebuiltin(f'Container.SetViewMode({VIEW_ID_LIST})')
 
 def router(paramstring):
     params = dict(parse_qsl(paramstring))
@@ -1594,10 +1441,12 @@ def router(paramstring):
         list_watched_shows()
     elif action == 'list_movie_genres':
         list_movie_genres()
-    elif action == 'list_shows_by_genre':
-        list_shows_by_genre(params)
+    elif action == 'list_show_genres':
+        list_show_genres()
     elif action == 'list_movies_by_genre':
         list_movies_by_genre(params)
+    elif action == 'list_shows_by_genre':
+        list_shows_by_genre(params)
     elif action == 'list_all_my_movies':
         list_all_my_movies()
     elif action == 'list_all_my_shows':
@@ -1630,4 +1479,4 @@ def router(paramstring):
         menu()
 
 if __name__ == '__main__':
-    router(sys.argv[2])
+    router(sys.argv[2][1:])
